@@ -1,6 +1,12 @@
-use clap::Subcommand;
+use clap::{Parser, Subcommand, CommandFactory};
 
-/// This example shows INCORRECTLY sorted subcommands (will fail validation)
+/// This example shows INCORRECTLY sorted subcommands (will panic)
+#[derive(Parser)]
+struct Cli {
+    #[command(subcommand)]
+    command: Commands,
+}
+
 #[derive(Subcommand)]
 enum Commands {
     /// List all items
@@ -17,5 +23,7 @@ enum Commands {
 }
 
 fn main() {
-    println!("This is an example of incorrectly sorted subcommands");
+    // This will panic because commands are not sorted!
+    clap_sort::assert_sorted(&Cli::command());
+    println!("This line will never be reached");
 }

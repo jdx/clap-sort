@@ -1,98 +1,108 @@
 # clap-sort
 
-A Rust library and CLI tool to validate that clap `Subcommand` enums are sorted alphabetically by their CLI names.
+A Rust library to validate that clap `Subcommand` enums are sorted alphabetically.
 
 ## Overview
 
-When using clap's derive API, it's a good practice to keep subcommands sorted alphabetically for easier maintenance. This crate helps enforce that convention by parsing Rust source files and checking that all enums with `#[derive(Subcommand)]` have their variants sorted.
+When using clap's derive API, it's a good practice to keep subcommands sorted alphabetically for easier maintenance and better UX. This crate helps enforce that convention by validating the clap `Command` structure at runtime.
 
 ## Features
 
-- Validates that clap `Subcommand` enum variants are sorted alphabetically
-- Respects custom `#[command(name = "...")]` attributes
-- Handles kebab-case conversion from snake_case variant names
-- Ignores non-Subcommand enums
-- Can be used as a library or CLI tool
+- Validates that clap subcommands are sorted alphabetically
+- Works with both builder and derive APIs
+- Easy integration via unit tests
+- Zero dependencies beyond clap
+- Lightweight and fast
 
 ## Installation
-
-### As a library
 
 Add to your `Cargo.toml`:
 
 ```toml
 [dev-dependencies]
-clap-sort = { path = "path/to/clap-sort" }
-```
-
-### As a CLI tool
-
-Build and install:
-
-```bash
-cd cli
-cargo build --release
-cargo install --path .
+clap-sort = "0.1"
 ```
 
 ## Usage
 
-### Library
+### Unit Test Integration (Recommended)
+
+The best way to use `clap-sort` is to add a unit test to your CLI project:
 
 ```rust
-use clap_sort::{validate_file, validate_file_path};
-use std::path::Path;
+#[cfg(test)]
+mod tests {
+    use clap::CommandFactory;
 
-// Validate a source string
-let source = r#"
-    use clap::Subcommand;
-
-    #[derive(Subcommand)]
-    enum Commands {
-        Add,
-        Delete,
-        List,
-    }
-"#;
-
-assert!(validate_file(source).is_ok());
-
-// Validate a file
-let path = Path::new("src/main.rs");
-match validate_file_path(path) {
-    Ok(()) => println!("All subcommands are sorted!"),
-    Err(errors) => {
-        for error in errors {
-            eprintln!("{}", error);
-        }
+    #[test]
+    fn test_subcommands_are_sorted() {
+        let cmd = cli::Cli::command();
+        clap_sort::assert_sorted(&cmd);
     }
 }
 ```
 
-### CLI
+This approach ensures that:
+- Your subcommands stay sorted as part of your normal test suite
+- CI/CD will catch any unsorted commands before merge
+- Developers get immediate feedback when running `cargo test`
 
-```bash
-# Check a single file
-clap-sort-cli src/main.rs
+### Full Example with Derive API
 
-# Check multiple files
-clap-sort-cli src/main.rs src/commands.rs
+```rust
+use clap::{Parser, Subcommand};
 
-# Example output for unsorted file:
-# ✗ src/commands.rs: Found 1 error(s)
-#   Enum 'Commands' has unsorted subcommands.
-#   Actual order: ["list", "add", "delete"]
-#   Expected order: ["add", "delete", "list"]
+#[derive(Parser)]
+struct Cli {
+    #[command(subcommand)]
+    command: Commands,
+}
+
+#[derive(Subcommand)]
+enum Commands {
+    Add,      // ✓ Sorted
+    Delete,   // ✓ Sorted
+    List,     // ✓ Sorted
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use clap::CommandFactory;
+
+    #[test]
+    fn verify_cli_sorted() {
+        clap_sort::assert_sorted(&Cli::command());
+    }
+}
+```
+
+### Non-Panicking Validation
+
+If you prefer Result-based error handling:
+
+```rust
+use clap::CommandFactory;
+
+#[test]
+fn test_subcommands() {
+    let cmd = Cli::command();
+    match clap_sort::is_sorted(&cmd) {
+        Ok(()) => println!("Commands are sorted!"),
+        Err(msg) => panic!("{}", msg),
+    }
+}
 ```
 
 ## How It Works
 
-The library uses `syn` to parse Rust source files and find all enums with `#[derive(Subcommand)]`. For each variant, it:
+The library validates the runtime `Command` structure by:
 
-1. Checks for `#[command(name = "...")]` or `#[clap(name = "...")]` attributes
-2. If no custom name, converts the variant identifier to kebab-case (e.g., `AddUser` → `add-user`)
-3. Compares the actual order with the alphabetically sorted order
-4. Reports any mismatches
+1. Extracting all subcommand names from the clap `Command`
+2. Comparing them with their alphabetically sorted order
+3. Panicking (or returning an error) if they don't match
+
+This approach works with both the builder API and derive API, and validates the actual command structure as clap sees it.
 
 ## Examples
 
@@ -147,12 +157,45 @@ The library includes comprehensive tests covering:
 - Non-Subcommand enums (should be ignored)
 - Multiple enums in one file
 
-## Use Cases
+## Real-world Example
 
-- **CI/CD**: Add to your pipeline to enforce sorted subcommands
-- **Pre-commit hooks**: Validate files before committing
-- **Development**: Quickly check if your commands are properly sorted
-- **Code review**: Automatically verify PR changes maintain sort order
+Here's a complete example showing how unsorted commands are caught:
+
+```rust
+use clap::{Parser, Subcommand};
+
+#[derive(Parser)]
+struct Cli {
+    #[command(subcommand)]
+    command: Commands,
+}
+
+#[derive(Subcommand)]
+enum Commands {
+    List,    // ❌ Should be third
+    Add,     // ❌ Should be first
+    Delete,  // ❌ Should be second
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use clap::CommandFactory;
+
+    #[test]
+    fn test_sorted() {
+        clap_sort::assert_sorted(&Cli::command());
+    }
+}
+```
+
+When you run `cargo test`, this will fail with:
+
+```
+thread 'tests::test_sorted' panicked at 'Subcommands are not sorted alphabetically!
+Actual order: ["list", "add", "delete"]
+Expected order: ["add", "delete", "list"]'
+```
 
 ## License
 
