@@ -5,7 +5,7 @@
 //! This crate provides functionality to validate that:
 //! - Subcommands are sorted alphabetically
 //! - Arguments are grouped and sorted by type:
-//!   1. Positional arguments (alphabetically)
+//!   1. Positional arguments (order not enforced - parsing order matters)
 //!   2. Flags with short options (alphabetically by short option)
 //!   3. Long-only flags (alphabetically)
 
@@ -14,7 +14,7 @@
 /// This checks:
 /// - Subcommands are sorted alphabetically
 /// - Arguments are grouped and sorted by type:
-///   1. Positional arguments (alphabetically)
+///   1. Positional arguments (order not enforced)
 ///   2. Flags with short options (alphabetically by short option)
 ///   3. Long-only flags (alphabetically)
 ///
@@ -135,19 +135,7 @@ fn is_arguments_sorted(cmd: &clap::Command) -> Result<(), String> {
         }
     }
 
-    // Check positional args are sorted
-    let positional_ids: Vec<&str> = positional.iter().map(|a| a.get_id().as_str()).collect();
-    let mut sorted_positional = positional_ids.clone();
-    sorted_positional.sort_unstable();
-
-    if positional_ids != sorted_positional {
-        return Err(format!(
-            "Positional arguments in '{}' are not sorted!\nActual: {:?}\nExpected: {:?}",
-            cmd.get_name(),
-            positional_ids,
-            sorted_positional
-        ));
-    }
+    // Note: We don't check if positional args are sorted - their order matters for parsing
 
     // Check short flags are sorted by short option
     let with_short_shorts: Vec<char> = with_short
@@ -399,8 +387,8 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Positional arguments")]
-    fn test_positional_unsorted() {
+    fn test_positional_order_not_enforced() {
+        // Positional arguments can be in any order since their order matters for parsing
         let cmd = Command::new("test")
             .arg(clap::Arg::new("second"))
             .arg(clap::Arg::new("first"));
