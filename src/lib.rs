@@ -505,4 +505,49 @@ mod tests {
         // Should pass - subcommand args are sorted and global flag doesn't interfere
         assert_sorted(&cmd);
     }
+
+    #[test]
+    #[should_panic(expected = "Flags with short options")]
+    fn test_uppercase_before_lowercase_same_letter() {
+        use clap::Arg;
+
+        // Uppercase I before lowercase i - should fail
+        let cmd = Command::new("test")
+            .arg(Arg::new("index").short('I').long("index"))
+            .arg(Arg::new("inject").short('i').long("inject"));
+
+        assert_sorted(&cmd);
+    }
+
+    #[test]
+    fn test_lowercase_before_uppercase_same_letter() {
+        use clap::Arg;
+
+        // Lowercase i before uppercase I - should pass
+        let cmd = Command::new("test")
+            .arg(Arg::new("inject").short('i').long("inject"))
+            .arg(Arg::new("index").short('I').long("index"));
+
+        assert_sorted(&cmd);
+    }
+
+    #[test]
+    #[should_panic(expected = "Flags with short options")]
+    fn test_task_docs_flags_unsorted() {
+        use clap::Arg;
+
+        // Reproduces the task_docs issue: -I before -i
+        let cmd = Command::new("generate")
+            .subcommand(
+                Command::new("task-docs")
+                    .arg(Arg::new("index").short('I').long("index"))
+                    .arg(Arg::new("inject").short('i').long("inject"))
+                    .arg(Arg::new("multi").short('m').long("multi"))
+                    .arg(Arg::new("output").short('o').long("output"))
+                    .arg(Arg::new("root").short('r').long("root"))
+                    .arg(Arg::new("style").short('s').long("style")),
+            );
+
+        assert_sorted(&cmd);
+    }
 }
