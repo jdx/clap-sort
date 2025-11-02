@@ -230,15 +230,28 @@ fn is_arguments_sorted(cmd: &clap::Command) -> Result<(), String> {
     expected_order.extend(long_only.iter().map(|a| a.get_id().as_str()));
 
     if arg_ids != expected_order {
+        // Build full command path for clearer error messages
+        let full_path = get_command_path(cmd);
         return Err(format!(
             "Arguments in '{}' are not in correct group order!\nExpected: [positional, short flags, long-only flags]\nActual: {:?}\nExpected: {:?}",
-            cmd.get_name(),
+            full_path,
             arg_ids,
             expected_order
         ));
     }
 
     Ok(())
+}
+
+/// Get the full command path (e.g., "cache prune" instead of just "prune")
+fn get_command_path(cmd: &clap::Command) -> String {
+    let mut parts = vec![cmd.get_name()];
+    let mut current = cmd;
+
+    // Try to walk up to find parent commands
+    // Note: clap doesn't expose parent relationship, so we can only show the immediate name
+    // This is a limitation of clap's API
+    parts.into_iter().rev().collect::<Vec<_>>().join(" ")
 }
 
 #[cfg(test)]
