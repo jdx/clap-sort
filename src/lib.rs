@@ -245,13 +245,9 @@ fn is_arguments_sorted(cmd: &clap::Command) -> Result<(), String> {
 
 /// Get the full command path (e.g., "cache prune" instead of just "prune")
 fn get_command_path(cmd: &clap::Command) -> String {
-    let mut parts = vec![cmd.get_name()];
-    let mut current = cmd;
-
-    // Try to walk up to find parent commands
     // Note: clap doesn't expose parent relationship, so we can only show the immediate name
     // This is a limitation of clap's API
-    parts.into_iter().rev().collect::<Vec<_>>().join(" ")
+    cmd.get_name().to_string()
 }
 
 #[cfg(test)]
