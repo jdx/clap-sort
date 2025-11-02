@@ -450,4 +450,50 @@ mod tests {
 
         assert_sorted(&cmd);
     }
+
+    #[test]
+    fn test_global_flags_not_checked_in_subcommands() {
+        use clap::{Arg, ArgAction};
+
+        // Global flag 'v' should not interfere with subcommand's 'd' flag ordering
+        let cmd = Command::new("test")
+            .arg(Arg::new("verbose").short('v').long("verbose").global(true).action(ArgAction::SetTrue))
+            .subcommand(
+                Command::new("sub")
+                    .arg(Arg::new("debug").short('d').long("debug").action(ArgAction::SetTrue))
+                    .arg(Arg::new("output").short('o').long("output")),
+            );
+
+        // Should not panic - we only check non-global args in subcommands
+        assert_sorted(&cmd);
+    }
+
+    #[test]
+    fn test_global_flags_dont_appear_in_subcommand_args() {
+        use clap::{Arg, ArgAction};
+
+        // Verify that global flags don't appear in subcommand's get_arguments()
+        // This confirms there's no bug with global flags interfering with sorting
+        let cmd = Command::new("test")
+            .arg(Arg::new("verbose").short('v').long("verbose").global(true).action(ArgAction::SetTrue))
+            .subcommand(
+                Command::new("sub")
+                    .arg(Arg::new("debug").short('d').long("debug").action(ArgAction::SetTrue))
+                    .arg(Arg::new("output").short('o').long("output")),
+            );
+
+        let subcmd = cmd.find_subcommand("sub").unwrap();
+        let args: Vec<_> = subcmd.get_arguments().collect();
+
+        // Subcommand should only see its own 2 args, not the global flag
+        assert_eq!(args.len(), 2);
+
+        // Verify neither arg is global
+        for arg in &args {
+            assert!(!arg.is_global_set(), "Subcommand arg {} should not be global", arg.get_id());
+        }
+
+        // Should pass - subcommand args are sorted and global flag doesn't interfere
+        assert_sorted(&cmd);
+    }
 }
