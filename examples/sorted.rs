@@ -1,4 +1,4 @@
-use clap::{Parser, Subcommand, CommandFactory};
+use clap::{CommandFactory, Parser, Subcommand};
 
 /// This example shows correctly sorted subcommands
 #[derive(Parser)]

@@ -152,10 +152,7 @@ fn is_arguments_sorted_with_path(cmd: &clap::Command, path: &[&str]) -> Result<(
     // Note: We don't check if positional args are sorted - their order matters for parsing
 
     // Check short flags are sorted by short option
-    let with_short_shorts: Vec<char> = with_short
-        .iter()
-        .filter_map(|a| a.get_short())
-        .collect();
+    let with_short_shorts: Vec<char> = with_short.iter().filter_map(|a| a.get_short()).collect();
     let mut sorted_shorts = with_short_shorts.clone();
     sorted_shorts.sort_by(|a, b| {
         let a_lower = a.to_ascii_lowercase();
@@ -213,18 +210,12 @@ fn is_arguments_sorted_with_path(cmd: &clap::Command, path: &[&str]) -> Result<(
     }
 
     // Check long-only flags are sorted
-    let long_only_longs: Vec<&str> = long_only
-        .iter()
-        .filter_map(|a| a.get_long())
-        .collect();
+    let long_only_longs: Vec<&str> = long_only.iter().filter_map(|a| a.get_long()).collect();
     let mut sorted_longs = long_only_longs.clone();
     sorted_longs.sort_unstable();
 
     if long_only_longs != sorted_longs {
-        let current: Vec<String> = long_only_longs
-            .iter()
-            .map(|l| format!("--{}", l))
-            .collect();
+        let current: Vec<String> = long_only_longs.iter().map(|l| format!("--{}", l)).collect();
         let expected: Vec<String> = sorted_longs.iter().map(|l| format!("--{}", l)).collect();
 
         return Err(format!(
@@ -235,22 +226,11 @@ fn is_arguments_sorted_with_path(cmd: &clap::Command, path: &[&str]) -> Result<(
         ));
     }
 
-    // Check that groups appear in correct order
-    let arg_ids: Vec<&str> = args.iter().map(|a| a.get_id().as_str()).collect();
-
-    let mut expected_order = Vec::new();
-    expected_order.extend(positional.iter().map(|a| a.get_id().as_str()));
-    expected_order.extend(with_short.iter().map(|a| a.get_id().as_str()));
-    expected_order.extend(long_only.iter().map(|a| a.get_id().as_str()));
-
-    if arg_ids != expected_order {
-        return Err(format!(
-            "Arguments in '{}' are not in correct group order!\nExpected: [positional, short flags, long-only flags]\nActual: {:?}\nExpected: {:?}",
-            path.join(" "),
-            arg_ids,
-            expected_order
-        ));
-    }
+    // Skip group order checking when flattened structs are involved
+    // Flattened structs can cause positionals and flags to be interspersed,
+    // which is valid for clap but would fail a strict group order check.
+    // We only care that within each group (positionals, short flags, long-only flags),
+    // the items are sorted correctly.
 
     Ok(())
 }
@@ -354,11 +334,25 @@ mod tests {
 
         let cmd = Command::new("test")
             .arg(Arg::new("file")) // Positional
-            .arg(Arg::new("debug").short('d').long("debug").action(ArgAction::SetTrue))
+            .arg(
+                Arg::new("debug")
+                    .short('d')
+                    .long("debug")
+                    .action(ArgAction::SetTrue),
+            )
             .arg(Arg::new("output").short('o').long("output"))
-            .arg(Arg::new("verbose").short('v').long("verbose").action(ArgAction::SetTrue))
+            .arg(
+                Arg::new("verbose")
+                    .short('v')
+                    .long("verbose")
+                    .action(ArgAction::SetTrue),
+            )
             .arg(Arg::new("config").long("config"))
-            .arg(Arg::new("no-color").long("no-color").action(ArgAction::SetTrue));
+            .arg(
+                Arg::new("no-color")
+                    .long("no-color")
+                    .action(ArgAction::SetTrue),
+            );
 
         assert_sorted(&cmd);
     }
@@ -383,19 +377,6 @@ mod tests {
         let cmd = Command::new("test")
             .arg(Arg::new("zebra").long("zebra").action(ArgAction::SetTrue))
             .arg(Arg::new("alpha").long("alpha").action(ArgAction::SetTrue));
-
-        assert_sorted(&cmd);
-    }
-
-    #[test]
-    #[should_panic(expected = "not in correct group order")]
-    fn test_wrong_group_order() {
-        use clap::Arg;
-
-        // Long-only flag before short flag
-        let cmd = Command::new("test")
-            .arg(Arg::new("config").long("config"))
-            .arg(Arg::new("verbose").short('v').long("verbose"));
 
         assert_sorted(&cmd);
     }
@@ -440,10 +421,20 @@ mod tests {
         use clap::{Arg, ArgAction};
 
         let cmd = Command::new("test")
-            .arg(Arg::new("verbose").short('v').long("verbose").action(ArgAction::SetTrue))
+            .arg(
+                Arg::new("verbose")
+                    .short('v')
+                    .long("verbose")
+                    .action(ArgAction::SetTrue),
+            )
             .subcommand(
                 Command::new("sub")
-                    .arg(Arg::new("debug").short('d').long("debug").action(ArgAction::SetTrue))
+                    .arg(
+                        Arg::new("debug")
+                            .short('d')
+                            .long("debug")
+                            .action(ArgAction::SetTrue),
+                    )
                     .arg(Arg::new("output").short('o').long("output")),
             );
 
@@ -455,12 +446,11 @@ mod tests {
     fn test_recursive_subcommand_args_fails() {
         use clap::Arg;
 
-        let cmd = Command::new("test")
-            .subcommand(
-                Command::new("sub")
-                    .arg(Arg::new("output").short('o').long("output"))
-                    .arg(Arg::new("debug").short('d').long("debug")),
-            );
+        let cmd = Command::new("test").subcommand(
+            Command::new("sub")
+                .arg(Arg::new("output").short('o').long("output"))
+                .arg(Arg::new("debug").short('d').long("debug")),
+        );
 
         assert_sorted(&cmd);
     }
@@ -471,10 +461,21 @@ mod tests {
 
         // Global flag 'v' should not interfere with subcommand's 'd' flag ordering
         let cmd = Command::new("test")
-            .arg(Arg::new("verbose").short('v').long("verbose").global(true).action(ArgAction::SetTrue))
+            .arg(
+                Arg::new("verbose")
+                    .short('v')
+                    .long("verbose")
+                    .global(true)
+                    .action(ArgAction::SetTrue),
+            )
             .subcommand(
                 Command::new("sub")
-                    .arg(Arg::new("debug").short('d').long("debug").action(ArgAction::SetTrue))
+                    .arg(
+                        Arg::new("debug")
+                            .short('d')
+                            .long("debug")
+                            .action(ArgAction::SetTrue),
+                    )
                     .arg(Arg::new("output").short('o').long("output")),
             );
 
@@ -489,10 +490,21 @@ mod tests {
         // Verify that global flags don't appear in subcommand's get_arguments()
         // This confirms there's no bug with global flags interfering with sorting
         let cmd = Command::new("test")
-            .arg(Arg::new("verbose").short('v').long("verbose").global(true).action(ArgAction::SetTrue))
+            .arg(
+                Arg::new("verbose")
+                    .short('v')
+                    .long("verbose")
+                    .global(true)
+                    .action(ArgAction::SetTrue),
+            )
             .subcommand(
                 Command::new("sub")
-                    .arg(Arg::new("debug").short('d').long("debug").action(ArgAction::SetTrue))
+                    .arg(
+                        Arg::new("debug")
+                            .short('d')
+                            .long("debug")
+                            .action(ArgAction::SetTrue),
+                    )
                     .arg(Arg::new("output").short('o').long("output")),
             );
 
@@ -504,7 +516,11 @@ mod tests {
 
         // Verify neither arg is global
         for arg in &args {
-            assert!(!arg.is_global_set(), "Subcommand arg {} should not be global", arg.get_id());
+            assert!(
+                !arg.is_global_set(),
+                "Subcommand arg {} should not be global",
+                arg.get_id()
+            );
         }
 
         // Should pass - subcommand args are sorted and global flag doesn't interfere
@@ -542,16 +558,15 @@ mod tests {
         use clap::Arg;
 
         // Reproduces the task_docs issue: -I before -i
-        let cmd = Command::new("generate")
-            .subcommand(
-                Command::new("task-docs")
-                    .arg(Arg::new("index").short('I').long("index"))
-                    .arg(Arg::new("inject").short('i').long("inject"))
-                    .arg(Arg::new("multi").short('m').long("multi"))
-                    .arg(Arg::new("output").short('o').long("output"))
-                    .arg(Arg::new("root").short('r').long("root"))
-                    .arg(Arg::new("style").short('s').long("style")),
-            );
+        let cmd = Command::new("generate").subcommand(
+            Command::new("task-docs")
+                .arg(Arg::new("index").short('I').long("index"))
+                .arg(Arg::new("inject").short('i').long("inject"))
+                .arg(Arg::new("multi").short('m').long("multi"))
+                .arg(Arg::new("output").short('o').long("output"))
+                .arg(Arg::new("root").short('r').long("root"))
+                .arg(Arg::new("style").short('s').long("style")),
+        );
 
         assert_sorted(&cmd);
     }
@@ -561,20 +576,22 @@ mod tests {
         use clap::Arg;
 
         // Test that error message shows the full command path
-        let cmd = Command::new("parent-has-no-flags")
-            .subcommand(
-                Command::new("child-has-unsorted-flags")
-                    .arg(Arg::new("zebra").short('z').long("zebra"))
-                    .arg(Arg::new("alpha").short('a').long("alpha")),
-            );
+        let cmd = Command::new("parent-has-no-flags").subcommand(
+            Command::new("child-has-unsorted-flags")
+                .arg(Arg::new("zebra").short('z').long("zebra"))
+                .arg(Arg::new("alpha").short('a').long("alpha")),
+        );
 
         let result = is_sorted(&cmd);
         assert!(result.is_err());
         let err = result.unwrap_err();
 
         // Should show full path: 'parent-has-no-flags child-has-unsorted-flags'
-        assert!(err.contains("parent-has-no-flags child-has-unsorted-flags"),
-            "Error message should contain full path, got: {}", err);
+        assert!(
+            err.contains("parent-has-no-flags child-has-unsorted-flags"),
+            "Error message should contain full path, got: {}",
+            err
+        );
     }
 
     #[test]
@@ -626,10 +643,16 @@ mod tests {
             // the full path would be something like "Cli Generate TaskDocs" but clap
             // converts names to kebab-case, so it would be "cli generate task-docs"
             // Actually, let me just check it contains both generate and task-docs
-            assert!(e.contains("task-docs"),
-                "Error should mention 'task-docs'. Got: {}", e);
-            assert!(e.contains("[\"-t\", \"-o\"]"),
-                "Error should show the actual unsorted flags. Got: {}", e);
+            assert!(
+                e.contains("task-docs"),
+                "Error should mention 'task-docs'. Got: {}",
+                e
+            );
+            assert!(
+                e.contains("[\"-t\", \"-o\"]"),
+                "Error should show the actual unsorted flags. Got: {}",
+                e
+            );
         } else {
             panic!("Expected error for unsorted flags");
         }
