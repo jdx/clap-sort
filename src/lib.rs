@@ -407,7 +407,7 @@ mod tests {
 
     #[test]
     fn test_is_sorted_ok_with_args() {
-        use clap::{Arg, ArgAction};
+        use clap::Arg;
 
         let cmd = Command::new("test")
             .arg(Arg::new("file"))
@@ -549,5 +549,81 @@ mod tests {
             );
 
         assert_sorted(&cmd);
+    }
+
+    #[test]
+    fn test_error_message_shows_correct_subcommand() {
+        use clap::Arg;
+
+        // Test that error message shows the subcommand name, not parent
+        let cmd = Command::new("parent-has-no-flags")
+            .subcommand(
+                Command::new("child-has-unsorted-flags")
+                    .arg(Arg::new("zebra").short('z').long("zebra"))
+                    .arg(Arg::new("alpha").short('a').long("alpha")),
+            );
+
+        let result = is_sorted(&cmd);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+
+        // Should mention 'child-has-unsorted-flags', not 'parent-has-no-flags'
+        assert!(err.contains("child-has-unsorted-flags"), "Error message should contain subcommand name, got: {}", err);
+        assert!(!err.contains("parent-has-no-flags"), "Error message should not contain parent name, got: {}", err);
+    }
+
+    #[test]
+    fn test_error_with_derive_api_nested_subcommands() {
+        use clap::{Args, Parser, Subcommand};
+
+        #[derive(Parser)]
+        struct Cli {
+            #[command(subcommand)]
+            command: Commands,
+        }
+
+        #[derive(Subcommand)]
+        enum Commands {
+            /// Generate command
+            Generate(GenerateArgs),
+        }
+
+        #[derive(Args)]
+        struct GenerateArgs {
+            #[command(subcommand)]
+            command: GenerateCommands,
+        }
+
+        #[derive(Subcommand)]
+        enum GenerateCommands {
+            /// Task docs subcommand
+            TaskDocs(TaskDocsArgs),
+        }
+
+        #[derive(Args)]
+        struct TaskDocsArgs {
+            /// task flag
+            #[arg(short, long)]
+            task: Option<String>,
+
+            /// output flag
+            #[arg(short, long)]
+            output: Option<String>,
+        }
+
+        let cmd = Cli::command();
+        let result = is_sorted(&cmd);
+
+        if let Err(e) = result {
+            // The error should mention 'task-docs' (the command with unsorted flags)
+            // NOT 'generate' (the parent command with no flags)
+            eprintln!("Error message: {}", e);
+            assert!(e.contains("task-docs"),
+                "Error should mention 'task-docs' (the command with unsorted flags), not 'generate'. Got: {}", e);
+            assert!(e.contains("[\"-t\", \"-o\"]"),
+                "Error should show the actual unsorted flags. Got: {}", e);
+        } else {
+            panic!("Expected error for unsorted flags");
+        }
     }
 }
