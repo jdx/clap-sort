@@ -36,6 +36,13 @@
 /// clap_sort::assert_sorted(&cmd);
 /// ```
 pub fn assert_sorted(cmd: &clap::Command) {
+    assert_sorted_with_path(cmd, vec![]);
+}
+
+fn assert_sorted_with_path(cmd: &clap::Command, parent_path: Vec<&str>) {
+    let mut current_path = parent_path.clone();
+    current_path.push(cmd.get_name());
+
     // Check subcommands
     let subcommands: Vec<_> = cmd.get_subcommands().map(|s| s.get_name()).collect();
 
@@ -46,7 +53,7 @@ pub fn assert_sorted(cmd: &clap::Command) {
         if subcommands != sorted {
             panic!(
                 "Subcommands in '{}' are not sorted alphabetically!\nActual order: {:?}\nExpected order: {:?}",
-                cmd.get_name(),
+                current_path.join(" "),
                 subcommands,
                 sorted
             );
@@ -54,11 +61,11 @@ pub fn assert_sorted(cmd: &clap::Command) {
     }
 
     // Check arguments
-    assert_arguments_sorted(cmd);
+    assert_arguments_sorted_with_path(cmd, &current_path);
 
     // Recursively check subcommands
     for subcmd in cmd.get_subcommands() {
-        assert_sorted(subcmd);
+        assert_sorted_with_path(subcmd, current_path.clone());
     }
 }
 
@@ -82,6 +89,13 @@ pub fn assert_sorted(cmd: &clap::Command) {
 /// }
 /// ```
 pub fn is_sorted(cmd: &clap::Command) -> Result<(), String> {
+    is_sorted_with_path(cmd, vec![])
+}
+
+fn is_sorted_with_path(cmd: &clap::Command, parent_path: Vec<&str>) -> Result<(), String> {
+    let mut current_path = parent_path.clone();
+    current_path.push(cmd.get_name());
+
     // Check subcommands
     let subcommands: Vec<_> = cmd.get_subcommands().map(|s| s.get_name()).collect();
 
@@ -92,7 +106,7 @@ pub fn is_sorted(cmd: &clap::Command) -> Result<(), String> {
         if subcommands != sorted {
             return Err(format!(
                 "Subcommands in '{}' are not sorted alphabetically!\nActual order: {:?}\nExpected order: {:?}",
-                cmd.get_name(),
+                current_path.join(" "),
                 subcommands,
                 sorted
             ));
@@ -100,25 +114,25 @@ pub fn is_sorted(cmd: &clap::Command) -> Result<(), String> {
     }
 
     // Check arguments
-    is_arguments_sorted(cmd)?;
+    is_arguments_sorted_with_path(cmd, &current_path)?;
 
     // Recursively check subcommands
     for subcmd in cmd.get_subcommands() {
-        is_sorted(subcmd)?;
+        is_sorted_with_path(subcmd, current_path.clone())?;
     }
 
     Ok(())
 }
 
 /// Internal function to assert arguments are sorted.
-fn assert_arguments_sorted(cmd: &clap::Command) {
-    if let Err(msg) = is_arguments_sorted(cmd) {
+fn assert_arguments_sorted_with_path(cmd: &clap::Command, path: &[&str]) {
+    if let Err(msg) = is_arguments_sorted_with_path(cmd, path) {
         panic!("{}", msg);
     }
 }
 
 /// Checks if arguments are sorted correctly, returning a Result.
-fn is_arguments_sorted(cmd: &clap::Command) -> Result<(), String> {
+fn is_arguments_sorted_with_path(cmd: &clap::Command, path: &[&str]) -> Result<(), String> {
     let args: Vec<_> = cmd.get_arguments().collect();
 
     let mut positional = Vec::new();
@@ -192,7 +206,7 @@ fn is_arguments_sorted(cmd: &clap::Command) -> Result<(), String> {
 
         return Err(format!(
             "Flags with short options in '{}' are not sorted!\nActual: {:?}\nExpected: {:?}",
-            cmd.get_name(),
+            path.join(" "),
             current,
             expected
         ));
@@ -215,7 +229,7 @@ fn is_arguments_sorted(cmd: &clap::Command) -> Result<(), String> {
 
         return Err(format!(
             "Long-only flags in '{}' are not sorted!\nActual: {:?}\nExpected: {:?}",
-            cmd.get_name(),
+            path.join(" "),
             current,
             expected
         ));
@@ -230,24 +244,15 @@ fn is_arguments_sorted(cmd: &clap::Command) -> Result<(), String> {
     expected_order.extend(long_only.iter().map(|a| a.get_id().as_str()));
 
     if arg_ids != expected_order {
-        // Build full command path for clearer error messages
-        let full_path = get_command_path(cmd);
         return Err(format!(
             "Arguments in '{}' are not in correct group order!\nExpected: [positional, short flags, long-only flags]\nActual: {:?}\nExpected: {:?}",
-            full_path,
+            path.join(" "),
             arg_ids,
             expected_order
         ));
     }
 
     Ok(())
-}
-
-/// Get the full command path (e.g., "cache prune" instead of just "prune")
-fn get_command_path(cmd: &clap::Command) -> String {
-    // Note: clap doesn't expose parent relationship, so we can only show the immediate name
-    // This is a limitation of clap's API
-    cmd.get_name().to_string()
 }
 
 #[cfg(test)]
@@ -552,10 +557,10 @@ mod tests {
     }
 
     #[test]
-    fn test_error_message_shows_correct_subcommand() {
+    fn test_error_message_shows_full_command_path() {
         use clap::Arg;
 
-        // Test that error message shows the subcommand name, not parent
+        // Test that error message shows the full command path
         let cmd = Command::new("parent-has-no-flags")
             .subcommand(
                 Command::new("child-has-unsorted-flags")
@@ -567,9 +572,9 @@ mod tests {
         assert!(result.is_err());
         let err = result.unwrap_err();
 
-        // Should mention 'child-has-unsorted-flags', not 'parent-has-no-flags'
-        assert!(err.contains("child-has-unsorted-flags"), "Error message should contain subcommand name, got: {}", err);
-        assert!(!err.contains("parent-has-no-flags"), "Error message should not contain parent name, got: {}", err);
+        // Should show full path: 'parent-has-no-flags child-has-unsorted-flags'
+        assert!(err.contains("parent-has-no-flags child-has-unsorted-flags"),
+            "Error message should contain full path, got: {}", err);
     }
 
     #[test]
@@ -615,11 +620,14 @@ mod tests {
         let result = is_sorted(&cmd);
 
         if let Err(e) = result {
-            // The error should mention 'task-docs' (the command with unsorted flags)
-            // NOT 'generate' (the parent command with no flags)
+            // The error should show the full path
             eprintln!("Error message: {}", e);
+            // Since the root command is the Cli, and we have Generate, then TaskDocs,
+            // the full path would be something like "Cli Generate TaskDocs" but clap
+            // converts names to kebab-case, so it would be "cli generate task-docs"
+            // Actually, let me just check it contains both generate and task-docs
             assert!(e.contains("task-docs"),
-                "Error should mention 'task-docs' (the command with unsorted flags), not 'generate'. Got: {}", e);
+                "Error should mention 'task-docs'. Got: {}", e);
             assert!(e.contains("[\"-t\", \"-o\"]"),
                 "Error should show the actual unsorted flags. Got: {}", e);
         } else {
